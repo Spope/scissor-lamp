@@ -16,20 +16,18 @@ DFRobot_GP8403 dac(&Wire, DAC_I2C_ADDR);
 // The LED power supply does not light up below this share of its input range.
 // Anything under it is a dead zone, so 1..100% of user intensity is remapped
 // onto [DAC_MIN_PERCENT .. 100] and only 0% stays fully off.
-const float DAC_MIN_PERCENT = 9.0;
+const float DAC_MIN_PERCENT = 8.0;
 const int DAC_FULL_SCALE = 9999;
 
 // Potentiometer input
 const int POT_PIN = A0;
-const int NUM_SAMPLES = 14;
-const int TRIM_COUNT = 2;
+const int NUM_SAMPLES = 8;
 const float SAMPLE_HZ = 5.0;
 
 // When on remote mode, timer to check for onboard change
 unsigned long previousMillis = 0;
 const unsigned long checkChangeTimer = 500;  // ms
 
-int oldValue;
 byte potPercentage;
 byte oldPercentage;
 int dacValue;
@@ -174,53 +172,29 @@ void messageFromWifi(const uint8_t * mac, const uint8_t *data, int len) {
 //////////////
 int readFilteredPot()
 {
-  int samples[NUM_SAMPLES];
+  long sum = 0;
 
-  // Collect samples
   for (int i = 0; i < NUM_SAMPLES; i++) {
     //value from 0 to 4095
-    samples[i] = analogRead(POT_PIN);
+    sum += analogRead(POT_PIN);
     delayMicroseconds(10);   // Small delay helps ADC stability
   }
 
-  // Simple bubble sort (NUM_SAMPLES is small)
-  for (int i = 0; i < NUM_SAMPLES - 1; i++) {
-    for (int j = i + 1; j < NUM_SAMPLES; j++) {
-      if (samples[j] < samples[i]) {
-        int temp = samples[i];
-        samples[i] = samples[j];
-        samples[j] = temp;
-      }
-    }
-  }
-
-  // Average the middle values (exclude TRIM_COUNT extrema)
-  long sum = 0;
-  for (int i = TRIM_COUNT; i < NUM_SAMPLES - TRIM_COUNT; i++) {
-    sum += samples[i];
-  }
-
-  return sum / (NUM_SAMPLES - 2 * TRIM_COUNT);
+  return sum / NUM_SAMPLES;
 }
 
 void setFromOnboardPotentiometer() {
   int filtered = readFilteredPot();
 
-  // add some deadband
-  if (filtered < (oldValue ) || filtered > (oldValue )) {
-    oldValue = filtered;
-    conditionnalPrint(String(filtered));
+  // convert to percentage
+  potPercentage = map(filtered, 0, 3500, 0, 100);
 
-    // convert to percentage
-    potPercentage = map(oldValue, 0, 3500, 0, 100);
+  if (oldPercentage != potPercentage) {
+    conditionnalPrint("Pot percentage is: " + String(potPercentage) + "%");
 
-    if (oldPercentage != potPercentage) {
-      conditionnalPrint("Pot percentage is: " + String(potPercentage) + "%");
-
-      dacValue = percentToDac(potPercentage);
-      dac.setDACOutVoltage(dacValue, 0);
-      oldPercentage = potPercentage;
-    }
+    dacValue = percentToDac(potPercentage);
+    dac.setDACOutVoltage(dacValue, 0);
+    oldPercentage = potPercentage;
   }
   delay( (int)(1000.0 / SAMPLE_HZ) );
 }
