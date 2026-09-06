@@ -28,9 +28,19 @@ const float SAMPLE_HZ = 5.0;
 unsigned long previousMillis = 0;
 const unsigned long checkChangeTimer = 500;  // ms
 
-byte potPercentage;
-byte oldPercentage;
-int dacValue;
+// Handover between the remote override and the onboard knob.
+const int POT_TAKEOVER_THRESHOLD = 5;  // % knob move that grabs control back from the remote
+const int RAMP_SNAP_HYSTERESIS = 2;    // % upward move that ends a descent ramp (ADC noise guard)
+
+int lastAppliedPercent = 0;  // what is currently on the DAC
+int lastPotPercent = 0;      // last pot reading taken in ONBOARD mode, the takeover baseline
+
+// Descent ramp: the knob was turned down while the remote held control, so the output resumes
+// from the overridden value and is scaled down to 0 across the knob's remaining travel.
+bool rampActive = false;
+int rampStartPot = 0;      // knob position when the remote took over
+int rampStartPercent = 0;  // output the remote had imposed
+int rampLowestPot = 0;     // lowest knob reading seen since the ramp started
 
 typedef enum Modes {
   ONBOARD = 1,
@@ -81,6 +91,7 @@ void initDAC() {
   conditionnalPrint("DAC init succeed");
   // Set Channel O to 0V
   dac.setDACOutVoltage(0, 0);
+  lastAppliedPercent = 0;
 
   // Saving value for reboot
   dac.store();
@@ -88,11 +99,13 @@ void initDAC() {
 }
 
 void setMode(Modes newMode) {
+  if (newMode == Modes::REMOTE) {
+    rampActive = false;
+  }
   mode = newMode;
 }
 
 int remotePercentage = 0;
-int lastRemotePercentage;
 void saveFromRemote(int newRemotePercentage) {
   remotePercentage = newRemotePercentage;
   if (mode == Modes::REMOTE) {
@@ -101,10 +114,7 @@ void saveFromRemote(int newRemotePercentage) {
 }
 
 void setFromRemote() {
-  if (lastRemotePercentage != remotePercentage) {
-    dac.setDACOutVoltage(percentToDac(remotePercentage), 0);
-    lastRemotePercentage = remotePercentage;
-  }
+  applyIntensity(remotePercentage);
 }
 
 ////////////
@@ -183,19 +193,29 @@ int readFilteredPot()
   return sum / NUM_SAMPLES;
 }
 
+int readPotPercent()
+{
+  // map() overshoots 100 above 3500 counts, so clamp.
+  return constrain(map(readFilteredPot(), 0, 3500, 0, 100), 0, 100);
+}
+
 void setFromOnboardPotentiometer() {
-  int filtered = readFilteredPot();
+  int potPercent = readPotPercent();
+  lastPotPercent = potPercent;
 
-  // convert to percentage
-  potPercentage = map(filtered, 0, 3500, 0, 100);
-
-  if (oldPercentage != potPercentage) {
-    conditionnalPrint("Pot percentage is: " + String(potPercentage) + "%");
-
-    dacValue = percentToDac(potPercentage);
-    dac.setDACOutVoltage(dacValue, 0);
-    oldPercentage = potPercentage;
+  int target = potPercent;
+  if (rampActive) {
+    if (potPercent < rampLowestPot) {
+      rampLowestPot = potPercent;
+    }
+    if (potPercent > rampLowestPot + RAMP_SNAP_HYSTERESIS || potPercent == 0) {
+      rampActive = false;  // knob went back up, or reached 0: raw value from now on
+    } else {
+      target = (rampStartPercent * potPercent + rampStartPot / 2) / rampStartPot;
+    }
   }
+
+  applyIntensity(target);
   delay( (int)(1000.0 / SAMPLE_HZ) );
 }
 
@@ -204,16 +224,27 @@ void checkForSignificantOnbardChange() {
   if (currentMillis - previousMillis < checkChangeTimer) {
     return;
   }
-  conditionnalPrint("PcheckForSignificantOnbardChange");
   previousMillis = currentMillis;
-  
-  int filtered = readFilteredPot();
-  // convert to percentage
-  int tempPotPercentage = map(filtered, 0, 3500, 0, 100);
-  if (abs(oldPercentage - tempPotPercentage) > 5) {
-    conditionnalPrint("set from checkForSignificantOnbardChange");
-    setMode(ONBOARD);
+
+  int potNow = readPotPercent();
+  if (abs(potNow - lastPotPercent) <= POT_TAKEOVER_THRESHOLD) {
+    return;
   }
+
+  // The knob moved, so it takes control back. Turned down, the output picks up where the
+  // remote left off and slides to 0 over the knob's remaining travel; turned up, the raw
+  // knob value applies straight away.
+  if (potNow < lastPotPercent && lastPotPercent > 0) {
+    conditionnalPrint("Onboard takeover, ramping down from " + String(lastAppliedPercent) + "%");
+    rampActive = true;
+    rampStartPot = lastPotPercent;
+    rampStartPercent = lastAppliedPercent;
+    rampLowestPot = potNow;
+  } else {
+    conditionnalPrint("Onboard takeover, following the knob");
+    rampActive = false;
+  }
+  setMode(ONBOARD);
 }
 
 
@@ -222,6 +253,16 @@ void checkForSignificantOnbardChange() {
 //////////
 // Tools
 //////////
+
+// Single point of contact with the DAC, shared by the remote and onboard paths.
+void applyIntensity(int percent) {
+  if (percent == lastAppliedPercent) {
+    return;
+  }
+  dac.setDACOutVoltage(percentToDac(percent), 0);
+  lastAppliedPercent = percent;
+  conditionnalPrint("Output = " + String(percent) + "%");
+}
 
 // Map a 0..100% intensity onto the usable output range of the power supply.
 uint16_t percentToDac(int percent) {
