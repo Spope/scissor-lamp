@@ -1,3 +1,8 @@
+// Remote control -- Seeed XIAO ESP32-C6.
+//
+// Arduino IDE:  Board = "XIAO_ESP32C6" (USB CDC On Boot defaults to Enabled -- leave it).
+// arduino-cli:  --fqbn esp32:esp32:XIAO_ESP32C6
+//
 // Référence technique: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/network/esp_now.html
 
 // Inclure les librairies

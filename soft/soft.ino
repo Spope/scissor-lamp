@@ -1,10 +1,18 @@
+// Lamp controller -- Waveshare ESP32-C6-Pico.
+//
+// Arduino IDE:  Board = "ESP32C6 Dev Module", USB CDC On Boot = Enabled.
+// arduino-cli:  --fqbn esp32:esp32:esp32c6:CDCOnBoot=cdc
+//
+// USB CDC On Boot MUST be enabled. That board defaults it to Disabled, which binds
+// Serial to the UART0 GPIO pins instead of USB: the lamp runs perfectly but prints
+// nothing over USB, while the bootloader still does -- an easy hour to lose.
+//
+// Own MAC ADDRESS: e4:b3:23:a2:d0:74
+
 #include "DFRobot_GP8403.h"
 #include <Wire.h>
 #include <esp_now.h>
 #include <WiFi.h>
-
-// Own MAC ADDRESS :
-// e4:b3:23:a2:d0:74
 
 
 //////////
