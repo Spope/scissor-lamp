@@ -39,16 +39,14 @@ const unsigned long POT_CHECK_INTERVAL_MS = 500;  // REMOTE: how often we look f
 const int POT_TAKEOVER_THRESHOLD = 5;  // % knob move that grabs control back from the remote
 const int RAMP_SNAP_HYSTERESIS = 2;    // % upward move that ends a descent ramp (ADC noise guard)
 
-const bool debug = true;
-
 
 /////////
 // Types
 /////////
 
-// NOTE: Modes, the CMD_* verbs, espnow_msg_t, readFilteredPot() and conditionalPrint() are
-// duplicated verbatim in emetteur/emetteur.ino. Sharing them would need a library under
-// soft/libraries/, which is out of scope here.
+// NOTE: Modes, the CMD_* verbs, espnow_msg_t and readFilteredPot() are duplicated
+// verbatim in emetteur/emetteur.ino. Sharing them would need a library under soft/libraries/,
+// which is out of scope here.
 enum Modes {
   ONBOARD = 1,
   REMOTE = 2
@@ -93,10 +91,9 @@ int rampLowestPot = 0;     // lowest knob reading seen since the ramp started
 
 
 void setup() {
-  // Always open the port; only the printing is gated on `debug`.
   Serial.begin(115200);
   delay(1000);
-  conditionalPrint("Init in mode " + String(modeToString(mode)));
+  Serial.println("Init in mode " + String(modeToString(mode)));
 
   pinMode(POT_PIN, INPUT);
 
@@ -123,16 +120,16 @@ void loop() {
 // DAC
 ///////
 void initDAC() {
-  conditionalPrint("Start DAC init …");
+  Serial.println("Start DAC init …");
   // Initialising DAC module
   Wire.begin(DAC_SDA_PIN, DAC_SCL_PIN);
   while (dac.begin() != 0) {
-    conditionalPrint("DAC init error, retrying …");
+    Serial.println("DAC init error, retrying …");
     delay(1000);
   }
   // Choose 10V Output
   dac.setDACOutRange(dac.eOutputRange10V);
-  conditionalPrint("DAC init succeeded");
+  Serial.println("DAC init succeeded");
   // Set Channel O to 0V
   dac.setDACOutVoltage(0, 0);
 
@@ -142,32 +139,32 @@ void initDAC() {
   // and to do it, it destroyed and rebuilt the Wire object. The DAC's power-on level is
   // therefore whatever is already in its EEPROM.
 
-  conditionalPrint("DAC initialized.");
+  Serial.println("DAC initialized.");
 }
 
 ////////////
 // WIFI
 ////////////
 void initWifi() {
-  conditionalPrint("Start WiFi init …");
+  Serial.println("Start WiFi init …");
   // Start wifi in station mode
   WiFi.mode(WIFI_STA);
 
   // Booting ESP NOW
   if (esp_now_init() != ESP_OK) {
-    conditionalPrint("ESP-NOW initialisation error.");
+    Serial.println("ESP-NOW initialisation error.");
     return;
   }
   // Registering received message callback. The signature below is the one ESP32 core 3.x/4.x
   // expects, so no cast is needed -- and a future signature change will fail to compile
   // instead of silently passing the wrong pointer.
   esp_now_register_recv_cb(messageFromWifi);
-  conditionalPrint("WiFi initialized.");
+  Serial.println("WiFi initialized.");
 }
 
 void messageFromWifi(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
   if (len != (int)sizeof(espnow_msg_t)) {
-    conditionalPrint("Ignored packet of unexpected size " + String(len));
+    Serial.println("Ignored packet of unexpected size " + String(len));
     return;
   }
 
@@ -178,28 +175,28 @@ void messageFromWifi(const esp_now_recv_info_t *info, const uint8_t *data, int l
     case CMD_MODE: {
       Modes newMode;
       if (parseMode(msg.value, &newMode)) {
-        conditionalPrint("Mode = " + String(msg.value));
+        Serial.println("Mode = " + String(msg.value));
         setMode(newMode);
       } else {
-        conditionalPrint("Invalid mode received");
+        Serial.println("Invalid mode received");
       }
       break;
     }
     case CMD_INTENSITY:
       if (msg.value >= 0 && msg.value <= 100) {
-        conditionalPrint("Intensity = " + String(msg.value));
+        Serial.println("Intensity = " + String(msg.value));
         // Only store it: loop() owns the DAC, so no I2C from the WiFi task.
         remotePercentage = msg.value;
       } else {
-        conditionalPrint("Invalid intensity received");
+        Serial.println("Invalid intensity received");
       }
       break;
     case CMD_POWER:
       // Not implemented yet; kept so the verb stays in sync with emetteur.ino.
-      conditionalPrint("Power " + String(msg.value));
+      Serial.println("Power " + String(msg.value));
       break;
     default:
-      conditionalPrint("Unknown command " + String(msg.verb));
+      Serial.println("Unknown command " + String(msg.verb));
       break;
   }
 }
@@ -281,13 +278,13 @@ void checkForSignificantOnboardChange() {
   // knob value applies straight away. Getting here with potNow < lastPotPercent implies
   // lastPotPercent > POT_TAKEOVER_THRESHOLD, so rampStartPot is never 0 below.
   if (potNow < lastPotPercent) {
-    conditionalPrint("Onboard takeover, ramping down from " + String(lastAppliedPercent) + "%");
+    Serial.println("Onboard takeover, ramping down from " + String(lastAppliedPercent) + "%");
     rampActive = true;
     rampStartPot = lastPotPercent;
     rampStartPercent = lastAppliedPercent;
     rampLowestPot = potNow;
   } else {
-    conditionalPrint("Onboard takeover, following the knob");
+    Serial.println("Onboard takeover, following the knob");
     rampActive = false;
   }
   setMode(ONBOARD);
@@ -312,7 +309,7 @@ void applyIntensity(int percent) {
   }
   dac.setDACOutVoltage(percentToMillivolts(percent), 0);
   lastAppliedPercent = percent;
-  conditionalPrint("Output = " + String(percent) + "%");
+  Serial.println("Output = " + String(percent) + "%");
 }
 
 // Map a 0..100% intensity onto the usable output range of the power supply.
@@ -324,13 +321,6 @@ uint16_t percentToMillivolts(int percent) {
     percent = 100;
   }
   return DAC_MIN_MV + (uint32_t)(DAC_MAX_MV - DAC_MIN_MV) * percent / 100;
-}
-
-void conditionalPrint(String text)
-{
-  if (debug) {
-    Serial.println(text);
-  }
 }
 
 const char* modeToString(Modes mode) {

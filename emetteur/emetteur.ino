@@ -9,8 +9,6 @@
 // Config
 //////////
 
-const bool debug = true;
-
 // Lamp MAC ADDRESS
 uint8_t lampMacAdress[] = {0xe4, 0xb3, 0x23, 0xa2, 0xd0, 0x74};
 
@@ -30,9 +28,9 @@ const int SAMPLE_PERIOD_MS = 200;    // how often the knob is sampled
 // Types
 /////////
 
-// NOTE: Modes, the CMD_* verbs, espnow_msg_t, readFilteredPot() and conditionalPrint() are
-// duplicated verbatim in soft/soft.ino. Sharing them would need a library under
-// soft/libraries/, which is out of scope here.
+// NOTE: Modes, the CMD_* verbs, espnow_msg_t and readFilteredPot() are duplicated
+// verbatim in soft/soft.ino. Sharing them would need a library under soft/libraries/,
+// which is out of scope here.
 enum Modes {
   ONBOARD = 1,
   REMOTE = 2
@@ -63,7 +61,6 @@ byte oldPercentage = 0;
 
 
 void setup() {
-  // Always open the port; only the printing is gated on `debug`.
   Serial.begin(115200);
 
   // Init led
@@ -73,7 +70,7 @@ void setup() {
   pinMode(POT_PIN, INPUT);
 
   if (!initWifi()) {
-    conditionalPrint("WiFi init failed, the lamp will not be switched to remote mode.");
+    Serial.println("WiFi init failed, the lamp will not be switched to remote mode.");
     return;
   }
 
@@ -99,7 +96,7 @@ bool initWifi() {
 
   // Booting ESP NOW
   if (esp_now_init() != ESP_OK) {
-    conditionalPrint("ESP-NOW initialisation error.");
+    Serial.println("ESP-NOW initialisation error.");
     return false;
   }
 
@@ -118,7 +115,7 @@ bool initWifi() {
 
   // Pairing
   if (esp_now_add_peer(&lampInfos) != ESP_OK) {
-    conditionalPrint("Pairing failed");
+    Serial.println("Pairing failed");
     return false;
   }
 
@@ -128,9 +125,9 @@ bool initWifi() {
 // La fonction de rappel qui nous assurera de la bonne livraison du message
 void messageSentCallback(const esp_now_send_info_t *tx_info, esp_now_send_status_t status) {
   if (status == ESP_NOW_SEND_SUCCESS) {
-    conditionalPrint("Last message sended status : Success");
+    Serial.println("Last message sended status : Success");
   } else {
-    conditionalPrint("Last message sended status : Failure");
+    Serial.println("Last message sended status : Failure");
   }
 }
 
@@ -180,7 +177,7 @@ void setFromRemotePotentiometer() {
     potPercentage = constrain(map(oldValue, 0, POT_MAX_COUNTS, 0, 100), 0, 100);
 
     if (oldPercentage != potPercentage) {
-      conditionalPrint("Pot percentage is: " + String(potPercentage) + "%");
+      Serial.println("Pot percentage is: " + String(potPercentage) + "%");
       sendIntensity(potPercentage);
       oldPercentage = potPercentage;
     }
@@ -197,22 +194,15 @@ void sendIntensity(int percentage)
   blink();
 
   if (result == ESP_OK) {
-    conditionalPrint("Message sent.");
+    Serial.println("Message sent.");
   } else {
-    conditionalPrint("Message failed");
+    Serial.println("Message failed");
   }
 }
 
 /////////////
 // Tools
 /////////////
-void conditionalPrint(String text)
-{
-  if (debug) {
-    Serial.println(text);
-  }
-}
-
 void blink() {
   digitalWrite(LED_BUILTIN, LOW);
   delay(50);
