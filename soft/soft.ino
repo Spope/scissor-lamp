@@ -21,7 +21,8 @@ const int DAC_FULL_SCALE = 9999;
 
 // Potentiometer input
 const int POT_PIN = A0;
-const int NUM_SAMPLES = 8;
+const int NUM_SAMPLES = 14;
+const int TRIM_COUNT = 2;
 const float SAMPLE_HZ = 5.0;
 
 // When on remote mode, timer to check for onboard change
@@ -182,15 +183,33 @@ void messageFromWifi(const uint8_t * mac, const uint8_t *data, int len) {
 //////////////
 int readFilteredPot()
 {
-  long sum = 0;
+  int samples[NUM_SAMPLES];
 
+  // Collect samples
   for (int i = 0; i < NUM_SAMPLES; i++) {
     //value from 0 to 4095
-    sum += analogRead(POT_PIN);
+    samples[i] = analogRead(POT_PIN);
     delayMicroseconds(10);   // Small delay helps ADC stability
   }
 
-  return sum / NUM_SAMPLES;
+  // Simple bubble sort (NUM_SAMPLES is small)
+  for (int i = 0; i < NUM_SAMPLES - 1; i++) {
+    for (int j = i + 1; j < NUM_SAMPLES; j++) {
+      if (samples[j] < samples[i]) {
+        int temp = samples[i];
+        samples[i] = samples[j];
+        samples[j] = temp;
+      }
+    }
+  }
+
+  // Average the middle values (exclude TRIM_COUNT extrema)
+  long sum = 0;
+  for (int i = TRIM_COUNT; i < NUM_SAMPLES - TRIM_COUNT; i++) {
+    sum += samples[i];
+  }
+
+  return sum / (NUM_SAMPLES - 2 * TRIM_COUNT);
 }
 
 int readPotPercent()
