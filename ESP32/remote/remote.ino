@@ -25,17 +25,16 @@ const int TRIM_COUNT = 2;
 // POT_MAX_COUNTS: these are two different physical potentiometers, so each value is a
 // calibration rather than a shared constant.
 const int POT_MAX_COUNTS = 3310;
-const int POT_DEADBAND_COUNTS = 20;  // ignore knob jitter smaller than this
-const int SAMPLE_PERIOD_MS = 200;    // how often the knob is sampled
+const int POT_SAMPLE_PERIOD_MS = 200;  // how often the knob is sampled
 
 
 /////////
 // Types
 /////////
 
-// NOTE: Modes, the CMD_* verbs, espnow_msg_t and readFilteredPot() are duplicated
-// verbatim in soft/soft.ino. Sharing them would need a library under soft/libraries/,
-// which is out of scope here.
+// NOTE: Modes, the CMD_* verbs, espnow_msg_t, readFilteredPot() and readPotPercent() are
+// duplicated verbatim in lamp/lamp.ino. Sharing them would need a library under
+// soft/libraries/, which is out of scope here.
 enum Modes {
   ONBOARD = 1,
   REMOTE = 2
@@ -60,9 +59,7 @@ typedef struct __attribute__((packed)) {
 // Une variable qui servira à stocker les réglages concernant le récepteur
 esp_now_peer_info_t lampInfos;
 
-int oldValue = 0;
-byte potPercentage = 0;
-byte oldPercentage = 0;
+int lastSentPercent = 0;  // last percentage pushed to the lamp
 
 
 void setup() {
@@ -89,7 +86,7 @@ void setup() {
 
 void loop() {
   setFromRemotePotentiometer();
-  delay(SAMPLE_PERIOD_MS);
+  delay(POT_SAMPLE_PERIOD_MS);
 }
 
 //////////////
@@ -170,23 +167,24 @@ int readFilteredPot()
   return sum / (NUM_SAMPLES - 2 * TRIM_COUNT);
 }
 
+int readPotPercent()
+{
+  // map() overshoots 100 above POT_MAX_COUNTS, so clamp. The lamp rejects anything over 100,
+  // so without this clamp the top of the knob's travel did nothing.
+  return constrain(map(readFilteredPot(), 0, POT_MAX_COUNTS, 0, 100), 0, 100);
+}
+
+// The trimmed median above is the whole noise filter: quantising to a percentage is coarser
+// than the filter's residual jitter (one percent is ~33 ADC counts here), so a raw-counts
+// deadband on top of it bought nothing. Same approach as the lamp's applyIntensity().
 void setFromRemotePotentiometer() {
-  int filtered = readFilteredPot();
-
-  // add some deadband
-  if (filtered < (oldValue - POT_DEADBAND_COUNTS) || filtered > (oldValue + POT_DEADBAND_COUNTS)) {
-    oldValue = filtered;
-
-    // Convert to percentage. map() overshoots 100 above POT_MAX_COUNTS -- the lamp rejects
-    // anything over 100, so without this clamp the top of the knob's travel did nothing.
-    potPercentage = constrain(map(oldValue, 0, POT_MAX_COUNTS, 0, 100), 0, 100);
-
-    if (oldPercentage != potPercentage) {
-      Serial.println("Pot percentage is: " + String(potPercentage) + "%");
-      sendIntensity(potPercentage);
-      oldPercentage = potPercentage;
-    }
+  int potPercent = readPotPercent();
+  if (potPercent == lastSentPercent) {
+    return;
   }
+  Serial.println("Pot percentage is: " + String(potPercent) + "%");
+  sendIntensity(potPercent);
+  lastSentPercent = potPercent;
 }
 
 void sendIntensity(int percentage)

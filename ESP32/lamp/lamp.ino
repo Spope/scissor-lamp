@@ -52,9 +52,9 @@ const int RAMP_SNAP_HYSTERESIS = 2;    // % upward move that ends a descent ramp
 // Types
 /////////
 
-// NOTE: Modes, the CMD_* verbs, espnow_msg_t and readFilteredPot() are duplicated
-// verbatim in emetteur/emetteur.ino. Sharing them would need a library under soft/libraries/,
-// which is out of scope here.
+// NOTE: Modes, the CMD_* verbs, espnow_msg_t, readFilteredPot() and readPotPercent() are
+// duplicated verbatim in remote/remote.ino. Sharing them would need a library under
+// soft/libraries/, which is out of scope here.
 enum Modes {
   ONBOARD = 1,
   REMOTE = 2
@@ -200,7 +200,7 @@ void messageFromWifi(const esp_now_recv_info_t *info, const uint8_t *data, int l
       }
       break;
     case CMD_POWER:
-      // Not implemented yet; kept so the verb stays in sync with emetteur.ino.
+      // Not implemented yet; kept so the verb stays in sync with remote/remote.ino.
       Serial.println("Power " + String(msg.value));
       break;
     default:
