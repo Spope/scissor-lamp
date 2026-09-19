@@ -1,6 +1,6 @@
 # Scissor lamp
 
-This is the software of the scissor lamp project, the hardware is described [here] (https://blog.spope.fr/posts/scissor-lamp/).
+This is the software of the scissor lamp project, the hardware is described [here](https://blog.spope.fr/posts/scissor-lamp/).
 
 The software is in charge of 2 things, adjust the lamp intensity based on the height of its deployment, or override this from a remote potentiometer.
 
